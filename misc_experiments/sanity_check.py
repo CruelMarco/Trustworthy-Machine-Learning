@@ -34,13 +34,11 @@ def run_sanity_check():
     
     pub_ds = torch.load(PUB_PATH, weights_only=False)
     
-    # Check what type the images are to ensure they aren't being mangled
     sample_img = pub_ds.imgs[0]
     print(f"Image Tensor Type: {sample_img.dtype}, Min: {sample_img.min().item()}, Max: {sample_img.max().item()}")
     
     MEAN, STD = [0.7406, 0.5331, 0.7059], [0.1491, 0.1864, 0.1301]
     
-    # We are using the exact transform from the assignment template[cite: 2]
     pub_ds.transform = transforms.Compose([
         transforms.Resize(32),
         transforms.Normalize(mean=MEAN, std=STD),
