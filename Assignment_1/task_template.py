@@ -1,31 +1,31 @@
 import os
 import sys
 import torch
-import pandas as pd
+import torch.nn.functional as F
+import numpy as np
 import requests
-import random
 import argparse
+import csv
 
 from pathlib import Path
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision.models import resnet18
 import torchvision.transforms as transforms
 
 
-# config
-BASE = Path(__file__).parent / "pt_files"
+# CONFIG
+BASE = Path(__file__).parent
 PUB_PATH = BASE / "pub.pt"
 PRIV_PATH = BASE / "priv.pt"
 MODEL_PATH = BASE / "model.pt"
 OUTPUT_CSV = BASE / "submission.csv"
 
-BASE_URL = "http://34.63.153.158"   #DONOT CHANGE
+BASE_URL = "http://34.63.153.158"
 API_KEY = "b48f55844fe487da01f65fe82d62c714"
-TASK_ID = "01-mia"  #DONOT CHANGE
+TASK_ID = "01-mia"
 
 
-
-# dataset classes
+#DATASET
 class TaskDataset(Dataset):
     def __init__(self, transform=None):
         self.ids = []
@@ -36,9 +36,20 @@ class TaskDataset(Dataset):
     def __getitem__(self, index):
         id_ = self.ids[index]
         img = self.imgs[index]
+        label = self.labels[index]
+
+        if img is None:
+            img = torch.zeros(3, 32, 32)
+
+        if label is None:
+            label = 0
+
+        if id_ is None:
+            id_ = -1
+
         if self.transform is not None:
             img = self.transform(img)
-        label = self.labels[index]
+
         return id_, img, label
 
     def __len__(self):
@@ -52,16 +63,20 @@ class MembershipDataset(TaskDataset):
 
     def __getitem__(self, index):
         id_, img, label = super().__getitem__(index)
-        return id_, img, label, self.membership[index]
+
+        m = self.membership[index]
+        if m is None:
+            m = 0
+
+        return id_, img, label, m
 
 
-# load datasets
-print("Loading datasets...")
+# LOAD
+print("Loading datasets...", flush=True)
+
 pub_ds = torch.load(PUB_PATH, weights_only=False)
 priv_ds = torch.load(PRIV_PATH, weights_only=False)
 
-
-# normalization (same as training)
 MEAN = [0.7406, 0.5331, 0.7059]
 STD = [0.1491, 0.1864, 0.1301]
 
@@ -74,73 +89,91 @@ pub_ds.transform = transform
 priv_ds.transform = transform
 
 
-# load model
-print("Loading model...")
+# MODEL 
+print("Loading model...", flush=True)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 model = resnet18(weights=None)
 model.conv1 = torch.nn.Conv2d(3, 64, 3, 1, 1, bias=False)
 model.maxpool = torch.nn.Identity()
 model.fc = torch.nn.Linear(512, 9)
 
-model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+model.to(device)
 model.eval()
 
 
-# create random submission (remove this later or it will rewrite your actual submission)
-print("Creating random submission...")
-ids = [str(i) for i in priv_ds.ids]
+#SCORING 
+def compute_scores(dataset):
+    loader = DataLoader(dataset, batch_size=256, shuffle=False)
 
-df = pd.DataFrame({
-    "id": ids,
-    "score": [random.random() for _ in ids]
-})
+    all_ids = []
+    all_scores = []
 
-df.to_csv(OUTPUT_CSV, index=False)
-print("Saved:", OUTPUT_CSV)
+    print("Scoring dataset...", flush=True)
+
+    with torch.no_grad():
+        for i, batch in enumerate(loader):
+            if i % 20 == 0:
+                print(f"Batch {i}", flush=True)
+
+            if len(batch) == 3:
+                ids, imgs, labels = batch
+            else:
+                ids, imgs, labels, _ = batch
+
+            imgs = imgs.to(device)
+            labels = labels.to(device)
+
+            logits = model(imgs)
+
+            loss = F.cross_entropy(logits, labels, reduction='none')
+            scores = -loss  # no per-batch normalization
+
+            all_ids.extend(ids)
+            all_scores.extend(scores.cpu().numpy())
+
+    return all_ids, all_scores
 
 
-# submit
-def die(msg):
-    print(msg, file=sys.stderr)
-    sys.exit(1)
+#RUN 
+ids, scores = compute_scores(priv_ds)
 
-parser = argparse.ArgumentParser(description="Submit a CSV file to the server.")
-args = parser.parse_args()
+print(f"Processed samples: {len(ids)}", flush=True)
 
-submit_path = OUTPUT_CSV
 
-if not submit_path.exists():
-    die(f"File not found: {submit_path}")
+#GLOBAL NORMALIZATION 
+scores = np.array(scores)
+scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
+
+
+#SAVE
+print("Saving submission...", flush=True)
+
+with open(OUTPUT_CSV, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["id", "score"])
+    for i, s in zip(ids, scores):
+        writer.writerow([int(i) if torch.is_tensor(i) else i, float(s)])
+
+print("Saved:", OUTPUT_CSV, flush=True)
+
+
+#SUBMIT
+print("Submitting...", flush=True)
 
 try:
-    with open(submit_path, "rb") as f:
+    with open(OUTPUT_CSV, "rb") as f:
         resp = requests.post(
             f"{BASE_URL}/submit/{TASK_ID}",
             headers={"X-API-Key": API_KEY},
-            files={"file": (submit_path.name, f, "application/csv")},
+            files={"file": (OUTPUT_CSV.name, f, "application/csv")},
             timeout=(10, 600),
         )
-    try:
-        body = resp.json()
-    except Exception:
-        body = {"raw_text": resp.text}
-
-    if resp.status_code == 413:
-        die("Upload rejected: file too large (HTTP 413).")
 
     resp.raise_for_status()
+    print("Successfully submitted.", flush=True)
 
-    print("Successfully submitted.")
-    print("Server response:", body)
-    submission_id = body.get("submission_id")
-    if submission_id:
-        print(f"Submission ID: {submission_id}")
-
-except requests.exceptions.RequestException as e:
-    detail = getattr(e, "response", None)
-    print(f"Submission error: {e}")
-    if detail is not None:
-        try:
-            print("Server response:", detail.json())
-        except Exception:
-            print("Server response (text):", detail.text)
-    sys.exit(1)
+except Exception as e:
+    print("Submission error:", e)
