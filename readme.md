@@ -22,3 +22,9 @@
 3. assignment_2_report.pdf - 2 Pager report of our approaches in this assignment, 
 
 
+## Assignment 3 Remarks
+
+1. The code files pertaining to the assignment 3 are located in the folder "Assignment_3/tml26_task3"
+2. "task_template_trades.py pert" pertains to the experiment we conducted using TRADES
+3. "task_template_v1.py" pertains to the code used to train Resnet38/50
+
