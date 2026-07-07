@@ -1,0 +1,16 @@
+universe = docker
+docker_image = cruelmarco/pytorch_gnn:v2
+executable = /home/moso00002/tml_26/Trustworthy-Machine-Learning/Assignment_3/tml26_task3/run.sh
+environment = "WANDB_API_KEY=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"
+output = runlogs/adml_local.$(ClusterId).$(ProcId).out
+error = runlogs/adml_local.$(ClusterId).$(ProcId).err
+log = runlogs/adml_local.$(ClusterId).log
+should_transfer_files   = YES
+transfer_input_files = task_template_v2sb.py, train.npz, run.sh
+request_GPUs = 1
+request_CPUs = 1
+request_memory = 8G
+requirements = UidDomain == "cs.uni-saarland.de" 
++WantGPUHomeMounted = true
++WantScratchMounted = true
+queue 1
