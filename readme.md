@@ -28,3 +28,15 @@
 2. "task_template_trades.py pert" pertains to the experiment we conducted using TRADES
 3. "task_template_v1.py" pertains to the code used to train Resnet38/50
 
+## Assignment 4 Remarks
+
+1. The code and report materials for assignment 4 are located in the folder `Assignment_4/`.
+2. We evaluated two different black-box watermark forgery approaches. Detailed write-ups are available here:
+    - **Method 1: Adaptive Spatial Injection (DIP + JND + Adaptive LPIPS Guardrail)**  
+       [`Assignment_4/Adaptive_Spatial_Injection.md`](Assignment_4/Adaptive_Spatial_Injection.md)
+    - **Method 2: Averaged Residual Estimation (Classical Denoising + Signal Averaging + Global Alpha)**  
+       [`Assignment_4/averaged_residual_details.md`](Assignment_4/averaged_residual_details.md)
+3. **Method 1 summary:** Uses Deep Image Prior to extract per-image high-frequency residuals, averages residuals per watermark group, applies JND masking to hide perturbations in textured regions, and enforces an adaptive LPIPS threshold during injection.
+4. **Method 2 summary:** Uses Non-Local Means denoising to estimate residuals, averages across the 25-source group to isolate shared watermark signal, then injects with a single globally tuned alpha selected through offline LPIPS sweeps.
+5. Our final best leaderboard setting for Assignment 4 came from the simpler averaged-residual pipeline (Method 2), while Method 1 was retained as a more advanced exploratory approach.
+
