@@ -8,7 +8,7 @@ import cv2
 
 # CONFIG
 ZIP_FILE = "Dataset.zip"          # Path to the downloaded dataset zip
-DATASET_DIR = Path(".")      # Unzipped folder
+DATASET_DIR = Path("Dataset")      # Unzipped folder
 CLEAN_DIR = DATASET_DIR / "clean_targets"
 SOURCES_DIR = DATASET_DIR / "watermarked_sources"
 

@@ -26,14 +26,11 @@ FILE_PATH = "submission_jnd_v2.zip"
 DIP_ITERATIONS = 1000  # Number of optimization steps per image
 LR = 0.001             # Learning rate for the DIP network
 
-# >>> START OF CHANGE: Method-Specific Hyperparameters
-# Instead of a global alpha of 3.0, we use a dictionary. 
-# Bumping the default to 10.0 to trade your massive LPIPS budget for Bit Accuracy.
+
 ALPHA_CONFIG = {
     "WM_1": 5, "WM_2": 5, "WM_3": 5, "WM_4": 5,
     "WM_5": 5, "WM_6": 5, "WM_7": 5, "WM_8": 5
 }
-# <<< END OF CHANGE
 
 # Initialize Weights & Biases
 wandb.init(
@@ -66,11 +63,7 @@ TEMP_OUT_DIR.mkdir(exist_ok=True)
 # 1. DEEP IMAGE PRIOR ARCHITECTURE
 # ==========================================
 class MiniDIP(nn.Module):
-    """
-    A lightweight, untrained Encoder-Decoder CNN. 
-    It naturally learns low-frequency image structures (content) faster than 
-    high-frequency noise (watermarks).
-    """
+
     def __init__(self):
         super().__init__()
         # Encoder: Downsamples the image to capture broad structures
@@ -95,11 +88,10 @@ class MiniDIP(nn.Module):
 # 2. CORE EXTRACTION & SCORING FUNCTIONS
 # ==========================================
 def extract_watermark_dip(image_path, iterations, lr, device):
-    """Extracts watermark by fitting an untrained CNN to the image."""
+
     original_pil = Image.open(image_path).convert("RGB")
     target_tensor = transforms.ToTensor()(original_pil).unsqueeze(0).to(device)
     
-    # >>> START OF CHANGE: DIP Stagnation Restart
     # Helper to create fresh weights if we get stuck
     def get_fresh_model():
         m = MiniDIP().to(device)
@@ -107,8 +99,7 @@ def extract_watermark_dip(image_path, iterations, lr, device):
         return m, o
         
     model, optimizer = get_fresh_model()
-    # <<< END OF CHANGE
-    
+
     loss_fn = nn.MSELoss()
     z = (torch.rand_like(target_tensor).to(device) * 0.1).requires_grad_(False)
     
@@ -121,7 +112,6 @@ def extract_watermark_dip(image_path, iterations, lr, device):
         loss.backward()
         optimizer.step()
 
-        # >>> START OF CHANGE: Stagnation Check
         if i > 0 and i % 100 == 0:
             current_loss = loss.item()
             # If the loss hasn't changed by at least 1e-5 over 100 steps, we are stuck.
@@ -130,14 +120,13 @@ def extract_watermark_dip(image_path, iterations, lr, device):
                 model, optimizer = get_fresh_model()
                 z = (torch.rand_like(target_tensor).to(device) * 0.1).requires_grad_(False)
                 prev_100_loss = float('inf')
-                continue # Skip the logging for this step and start over
+                continue 
                 
             prev_100_loss = current_loss
             
             # Stream to W&B
             wandb.log({"dip_extraction_loss": current_loss, "dip_step": i})
             print(f"      [Step {i:04d}/{iterations}] MSE Loss: {current_loss:.6f}")
-        # <<< END OF CHANGE
 
     with torch.no_grad():
         clean_estimate = model(z)
@@ -181,11 +170,9 @@ def get_jnd_mask(img_tensor, device):
     # 6. Smooth the mask slightly so watermark injection blends naturally
     mask = F.avg_pool2d(mask, kernel_size=3, stride=1, padding=1)
     
-    # >>> START OF CHANGE: JND Floor
     # Ensure smooth areas (like skies) still receive at least 10% of the watermark 
     # to protect frequency-domain / global payloads from being completely erased.
     mask = 0.1 + (0.9 * mask)
-    # <<< END OF CHANGE
     
     # Expand back to 3 channels to match the RGB image
     return mask.repeat(1, 3, 1, 1)
@@ -211,10 +198,8 @@ for source_wm, target_start, target_stop in CATEGORIES:
     if not source_images:
         continue
         
-    # >>> START OF CHANGE: Apply specific Alpha
     current_alpha = ALPHA_CONFIG[source_wm]
     print(f"  > Using injection multiplier (ALPHA): {current_alpha}")
-    # <<< END OF CHANGE
 
     # --- PHASE 1: EXTRACT & AVERAGE ---
     extracted_watermarks = []
@@ -231,9 +216,7 @@ for source_wm, target_start, target_stop in CATEGORIES:
     target_dir = DATASET_DIR / "clean_targets"
     batch_sqlt = []
     
-    # >>> START OF CHANGE: Define maximum acceptable LPIPS distance
     LPIPS_THRESHOLD = 0.015  # Tweak this if you need more/less visual quality
-    # <<< END OF CHANGE
     
     print(f"  > Injecting extracted signature into target images...")
     for number in range(target_start, target_stop + 1):
@@ -246,7 +229,6 @@ for source_wm, target_start, target_stop in CATEGORIES:
 
         w_batch_gpu = w_batch_tensor.to(device)
 
-        # >>> START OF CHANGE: Adaptive LPIPS Guardrail Loop
         dynamic_alpha = current_alpha
         
         for attempt in range(10): # Try up to 10 times to get under the threshold
@@ -267,7 +249,6 @@ for source_wm, target_start, target_stop in CATEGORIES:
             else:
                 # Distorted too much! Dial back the strength by 20% and try again
                 dynamic_alpha *= 0.8
-        # <<< END OF CHANGE
         
         # Move back to CPU for packaging
         forged_tensor = forged_tensor.cpu()
@@ -283,7 +264,7 @@ for source_wm, target_start, target_stop in CATEGORIES:
             "target_image_id": number,
             "lpips_distance": dist,
             "sqlt_score": sqlt,
-            "final_alpha_used": dynamic_alpha, # >>> Added so you can track the nerfed alpha in W&B
+            "final_alpha_used": dynamic_alpha, 
             "forged_image": wandb.Image(forged_img_np, caption=f"Sqlt: {sqlt:.4f}, Alpha: {dynamic_alpha:.4f}")
         })
         
