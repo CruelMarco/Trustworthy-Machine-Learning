@@ -5,6 +5,8 @@ This repository contains our pipeline for a black-box watermark forgery attack. 
 
 The code pertaining to this markdown is `averaged_residual.py`. 
 
+The result zip file pertaining to this experiment is `result_averaged_residual.zip`
+
 To succeed, the forged images must achieve a high **Detection Strength ($S_{det}$)**, the bit accuracy of the recovered watermark message, while maintaining near-imperceptible visual distortion, measured by **LPIPS ($S_{qlt}$)**.
 
 Our final pipeline achieves its best recorded leaderboard score (**0.4260**) using a deliberately simple two-stage design: **classical denoising** to isolate each image's watermark residual, **signal averaging** across a watermark group to cancel out image content, and a **single globally-tuned injection strength** chosen via an offline LPIPS sweep.

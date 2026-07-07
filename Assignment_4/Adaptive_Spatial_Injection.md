@@ -7,6 +7,8 @@ To succeed, the forged images must achieve a high **False Detection Rate ($S_{de
 This experiment achieved a score of 0.40 on leaderboadrdby bridging the gap between raw spatial signal extraction and human perceptual limits using **Deep Image Prior (DIP)**, **Signal Averaging**, **Just Noticeable Difference (JND) Masking**, and an **Adaptive LPIPS Guardrail**.
 
 The code pertaining to this experiment is `DIP_JND.py`
+
+The result zip file pertaining to this experiment is `result_DIP_JND.zip`
 ---
 
 ## Core Strategy & Rationale
